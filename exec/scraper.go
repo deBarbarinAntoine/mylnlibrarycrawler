@@ -8,7 +8,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	utils "webscraping"
 )
+
+type Library struct {
+	Name  string
+	Books []LightNovel
+}
 
 type LightNovel struct {
 	Url    string
@@ -28,7 +35,7 @@ func clearCurrentLine() {
 
 func loadingBar(current, max, space int) string {
 	percentage := (float32(current) / float32(max)) * float32(space)
-	progressBar := strings.Repeat("█", int(percentage)) + strings.Repeat("░", space-int(percentage))
+	progressBar := utils.ColorCode(utils.Teal) + strings.Repeat("█", int(percentage)) + strings.Repeat("░", space-int(percentage)) + utils.CLEARCOLOR
 	return progressBar
 }
 
@@ -36,7 +43,7 @@ func resize(current, max int, invariable, variable string) string {
 	var result string
 	size, err := termsize.GetSize()
 	if err != nil {
-		return invariable + " " + variable
+		return utils.ColorCode(utils.Aquamarine) + invariable + utils.CLEARCOLOR + " " + utils.ColorCode(utils.Deepskyblue) + variable + utils.CLEARCOLOR
 	} else {
 		var progressBar string
 		width := size.Width
@@ -48,11 +55,17 @@ func resize(current, max int, invariable, variable string) string {
 		lenMsg := len([]rune(fmt.Sprint(invariable, " ", progressBar, " > ", variable)))
 		if len([]rune(variable)) <= -(width - lenMsg) {
 			result = invariable + " " + variable
+		} else {
+			result = invariable + " " + progressBar + " > " + variable
 		}
-		result = invariable + " " + progressBar + " > " + variable
 		if rest := width - len([]rune(result)); rest < 0 {
-			return string([]rune(result)[:width])
+			result = string([]rune(result)[:width])
 		}
+		arrowIndex := strings.Index(result, ">")
+		if arrowIndex == -1 {
+			return utils.ColorCode(utils.Aquamarine) + result + utils.CLEARCOLOR
+		}
+		result = utils.ColorCode(utils.Aquamarine) + result[:arrowIndex] + utils.ColorCode(utils.Cyan) + result[arrowIndex:arrowIndex+1] + utils.ColorCode(utils.Deepskyblue) + result[arrowIndex+1:] + utils.CLEARCOLOR
 		return result
 	}
 }
@@ -77,7 +90,7 @@ func (ln *LightNovel) getInfo() {
 	}
 }
 
-func getLightNovels(lib []LightNovel) []LightNovel {
+func (lib *Library) getLightNovels() {
 	for i := 1; i < 76; i++ {
 		var newLN LightNovel
 		c := colly.NewCollector()
@@ -85,7 +98,7 @@ func getLightNovels(lib []LightNovel) []LightNovel {
 		c.OnHTML(".novel-title", func(e *colly.HTMLElement) {
 			newLN.Url = e.ChildAttr("a", "href")
 			newLN.Name = e.ChildAttr("a", "title")
-			lib = append(lib, newLN)
+			lib.Books = append(lib.Books, newLN)
 		})
 
 		err := c.Visit("https://novel-next.com/sort/completed-novelnext?page=" + strconv.Itoa(i))
@@ -96,21 +109,39 @@ func getLightNovels(lib []LightNovel) []LightNovel {
 		fmt.Print("\r", resize(i, 75, "Processing... ["+strconv.Itoa(i)+"/75]", newLN.Name))
 	}
 	fmt.Println()
-	return lib
 }
 
-func main() {
-	var myLightNovels []LightNovel
+func (lib *Library) fetchLN() {
+	lib.getLightNovels()
 
-	myLightNovels = getLightNovels(myLightNovels)
-
-	for i := range myLightNovels {
+	for i := range lib.Books {
 		clearCurrentLine()
-		fmt.Print("\r", resize(i+1, len(myLightNovels), "Processing... ["+strconv.Itoa(i+1)+"/"+strconv.Itoa(len(myLightNovels))+"]", myLightNovels[i].Name))
-		myLN := &myLightNovels[i]
+		fmt.Print("\r", resize(i+1, len(lib.Books), "Processing... ["+strconv.Itoa(i+1)+"/"+strconv.Itoa(len(lib.Books))+"]", lib.Books[i].Name))
+		myLN := &lib.Books[i]
 		myLN.getInfo()
 	}
 	fmt.Println()
-	fmt.Printf("My LightNovels library: %#v", myLightNovels)
+	fmt.Printf("My LightNovels library: %#v", lib)
 	fmt.Println()
+}
+
+var myLightNovels Library
+
+func main() {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	lib := &myLightNovels
+	go lib.fetchLN()
+	for {
+		var input string
+		fmt.Scanln(&input)
+		if input == "stop" {
+			break
+		} else {
+			fmt.Println()
+			fmt.Printf("My LightNovels library: %#v", myLightNovels)
+			fmt.Println()
+		}
+	}
+	wg.Wait()
 }

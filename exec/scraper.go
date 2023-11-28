@@ -27,6 +27,7 @@ type LightNovel struct {
 }
 
 type DisplayParameters struct {
+	DotsColor       string
 	InvariableColor string
 	LoadingBarColor string
 	ArrowColor      string
@@ -35,6 +36,7 @@ type DisplayParameters struct {
 }
 
 var myDisplayParams = DisplayParameters{
+	DotsColor:       utils.ColorCode(utils.Limegreen),
 	InvariableColor: utils.ColorCode(utils.Orange),
 	LoadingBarColor: utils.ColorCode(utils.Teal),
 	ArrowColor:      utils.ColorCode(utils.Aquamarine),
@@ -52,6 +54,52 @@ func clearCurrentLine() {
 	fmt.Print("\x1b[2k") // erase the current line
 }
 
+/*
+⢀⠁
+⠆⠰
+⠊⡠
+⢌⡑
+⢆⠱
+⢎⡱
+⢊⡡
+⢌⡑
+⢄⠑
+⠆⠰
+⠂⠠
+⠈⡀
+*/
+
+func loadingDots(stage int) string {
+	var dots string
+	switch stage % 12 {
+	case 0:
+		dots = "⢀⠁"
+	case 1:
+		dots = "⠆⠰"
+	case 2:
+		dots = "⠊⡠"
+	case 3:
+		dots = "⢌⡑"
+	case 4:
+		dots = "⢆⠱"
+	case 5:
+		dots = "⢎⡱"
+	case 6:
+		dots = "⢊⡡"
+	case 7:
+		dots = "⢌⡑"
+	case 8:
+		dots = "⢄⠑"
+	case 9:
+		dots = "⠆⠰"
+	case 10:
+		dots = "⠂⠠"
+	case 11:
+		dots = "⠈⡀"
+	}
+	return myDisplayParams.DotsColor + dots + utils.CLEARCOLOR
+}
+
 func loadingBar(current, max, space int) string {
 	percentage := (float32(current) / float32(max)) * float32(space)
 	progressBar := strings.Repeat("█", int(percentage)) + strings.Repeat("░", space-int(percentage))
@@ -59,10 +107,18 @@ func loadingBar(current, max, space int) string {
 }
 
 func resize(current, max int, invariable, variable string) string {
+	var dots string
+	if current == max {
+		dots = loadingDots(5)
+		invariable = " Downloaded  [" + strconv.Itoa(current) + "/" + strconv.Itoa(max) + "] "
+		variable = myDisplayParams.DotsColor + "[Done]"
+	} else {
+		dots = loadingDots(current)
+	}
 	var result string
 	size, err := termsize.GetSize()
 	if err != nil {
-		return myDisplayParams.InvariableColor + invariable + " " + myDisplayParams.VariableColor + variable + utils.CLEARCOLOR
+		return loadingDots(current) + myDisplayParams.InvariableColor + invariable + " " + myDisplayParams.VariableColor + variable + utils.CLEARCOLOR
 	} else {
 		var progressBar string
 		width := size.Width
@@ -73,9 +129,9 @@ func resize(current, max int, invariable, variable string) string {
 		}
 		lenMsg := len([]rune(fmt.Sprint(invariable, " ", progressBar, " > ", variable)))
 		if len([]rune(variable)) <= -(width - lenMsg) {
-			result = myDisplayParams.InvariableColor + invariable + utils.CLEARCOLOR + " " + myDisplayParams.VariableColor + variable + utils.CLEARCOLOR
+			result = dots + myDisplayParams.InvariableColor + invariable + utils.CLEARCOLOR + " " + myDisplayParams.VariableColor + variable + utils.CLEARCOLOR
 		} else {
-			result = myDisplayParams.InvariableColor + invariable + utils.CLEARCOLOR + " " + myDisplayParams.LoadingBarColor + progressBar + utils.CLEARCOLOR + myDisplayParams.ArrowColor + " > " + utils.CLEARCOLOR + myDisplayParams.VariableColor + variable + utils.CLEARCOLOR
+			result = dots + myDisplayParams.InvariableColor + invariable + utils.CLEARCOLOR + " " + myDisplayParams.LoadingBarColor + progressBar + utils.CLEARCOLOR + myDisplayParams.ArrowColor + " > " + utils.CLEARCOLOR + myDisplayParams.VariableColor + variable + utils.CLEARCOLOR
 		}
 
 		colorRegExp := regexp.MustCompile("\\033\\[[0-9;]+m")
@@ -125,7 +181,7 @@ func (lib *Library) getLightNovels() {
 			log.Fatal(err)
 		}
 		clearCurrentLine()
-		fmt.Print("\r", resize(i, 75, "Processing... ["+strconv.Itoa(i)+"/75]", newLN.Name))
+		fmt.Print("\r", resize(i, 75, " Downloading ["+strconv.Itoa(i)+"/75]", newLN.Name))
 	}
 	fmt.Println()
 }
@@ -135,7 +191,7 @@ func (lib *Library) fetchLN() {
 
 	for i := range lib.Books {
 		clearCurrentLine()
-		fmt.Print("\r", resize(i+1, len(lib.Books), "Processing... ["+strconv.Itoa(i+1)+"/"+strconv.Itoa(len(lib.Books))+"]", lib.Books[i].Name))
+		fmt.Print("\r", resize(i+1, len(lib.Books), " Downloading ["+strconv.Itoa(i+1)+"/"+strconv.Itoa(len(lib.Books))+"]", lib.Books[i].Name))
 		myLN := &lib.Books[i]
 		myLN.getInfo()
 	}
@@ -162,11 +218,12 @@ func main() {
 		var input string
 		fmt.Scanln(&input)
 		if input == "stop" {
+			fmt.Println(myDisplayParams.AlertColor, "Downloading failed : aborted operation!", utils.CLEARCOLOR)
 			os.Exit(0)
 		} else if input == "skip" {
 			break
 		} else {
-			fmt.Println()
+			fmt.Println(utils.CLEARCOLOR)
 			fmt.Printf("My LightNovels library: %#v", myLightNovels)
 			fmt.Println()
 			instructions()
